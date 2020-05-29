@@ -1,0 +1,46 @@
+---
+# Call the script with --ask-pass and give password for user
+- name: Ansible playbook to run sudo command as regular user
+  hosts: all
+  remote_user: user
+  become: true
+  become_method: sudo
+
+  tasks:
+    - name: Update system
+      apt: name="*" state=latest
+
+    - name: Install additonal packages
+      apt: name="{{ item }}" state=latest
+      with_items:
+        - unzip
+        - zfsprogs
+
+    - name: Download storcli installer script
+      get_url: url=http://10.12.17.6/scripts/storcli.sh dest=/tmp/storcli.sh
+
+    - name: Execute the storcli.sh
+      shell: /tmp/storcli.sh
+      register: output
+
+    - name: Remove the storcli.sh
+      file: path=/tmp/storcli.sh state=absent
+
+    - name: Set drives on the MegaRAID controlled to JBOD
+      command: /usr/bin/storcli /c0 set jbod=on force
+      register: output
+
+    - name: Reboot host and wait for it to restart
+      reboot:
+        msg: "Reboot initiated by Ansible"
+        connect_timeout: 5
+        reboot_timeout: 600
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: whoami
+
+    - name: Transfer and execute the drive format and mount script
+      script: mount_fstab.sh
+      register: output
+
+    - debug: var=output.stdout_lines
